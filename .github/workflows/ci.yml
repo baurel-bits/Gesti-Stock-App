@@ -1,0 +1,119 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master ]
+
+env:
+  JAVA_VERSION: '21'
+  MAVEN_OPTS: '-Xmx1024m'
+
+jobs:
+  # ═══════════════════════════════════════════════
+  # JOB 1 : Build + Tests unitaires
+  # ═══════════════════════════════════════════════
+  build:
+    name: 🏗️ Build & Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: ☕ Setup Java ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: 📦 Build & Compile
+        run: mvn compile -q
+
+      - name: 🧪 Run Unit Tests
+        run: mvn test -q
+
+      - name: 📊 Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-results
+          path: target/surefire-reports/
+          retention-days: 7
+
+      - name: 📦 Package (skip tests — déjà lancés)
+        run: mvn package -DskipTests -q
+
+      - name: 💾 Upload JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: stock-api-jar
+          path: target/stock-api-*.jar
+          retention-days: 7
+
+  # ═══════════════════════════════════════════════
+  # JOB 2 : Tests d'intégration (PostgreSQL)
+  # ═══════════════════════════════════════════════
+  integration-tests:
+    name: 🐘 Integration Tests (PostgreSQL)
+    runs-on: ubuntu-latest
+    needs: build
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: stock_test
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U test_user -d stock_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: ☕ Setup Java ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: 🧪 Run Integration Tests
+        run: mvn verify -DskipUnitTests -Dspring.profiles.active=test
+        env:
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/stock_test
+          SPRING_DATASOURCE_USERNAME: test_user
+          SPRING_DATASOURCE_PASSWORD: test_password
+
+      - name: 📊 Upload Integration Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-results
+          path: target/failsafe-reports/
+          retention-days: 7
+
+  # ═══════════════════════════════════════════════
+  # JOB 3 : Quality Gate
+  # ═══════════════════════════════════════════════
+  quality:
+    name: ✅ Quality Gate
+    runs-on: ubuntu-latest
+    needs: [ build, integration-tests ]
+
+    steps:
+      - name: 🎯 All checks passed
+        run: |
+          echo "✅ Build: OK"
+          echo "✅ Unit Tests: OK"
+          echo "✅ Integration Tests: OK"
+          echo "🎉 Pipeline CI/CD réussi !"

@@ -1,0 +1,45 @@
+name: Deploy
+
+on:
+  release:
+    types: [ published ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environnement de déploiement'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+env:
+  JAVA_VERSION: '21'
+
+jobs:
+  deploy:
+    name: 🚀 Deploy
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'staging' }}
+
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: ☕ Setup Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: 🏗️ Build & Package
+        run: mvn clean package -DskipTests -q
+
+      - name: 📦 Upload artifact to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: target/stock-api-*.jar
+          generate_release_notes: true
+        if: github.event_name == 'release'
