@@ -45,7 +45,7 @@ src/main/java/com/stock/api/
 
 - **Java 21** ou supérieur
 - **Maven 3.8+** (ou utiliser le wrapper `./mvnw`)
-- **PostgreSQL 15+** (ou H2 pour les tests)
+- **Docker & Docker Compose** (pour lancer PostgreSQL facilement)
 
 ## 🚀 Installation
 
@@ -54,9 +54,8 @@ src/main/java/com/stock/api/
 git clone https://github.com/votre-org/stock-api.git
 cd stock-api
 
-# 2. Configurer la base de données
-# Modifier src/main/resources/application-postgresql.properties
-# avec vos paramètres de connexion
+# 2. Lancer PostgreSQL avec Docker Compose
+docker compose up -d
 
 # 3. Compiler le projet
 ./mvnw clean install
@@ -64,17 +63,54 @@ cd stock-api
 
 ## ▶️ Lancement
 
-```bash
-# Lancer avec le profil PostgreSQL (défaut)
-./mvnw spring-boot:run
+### Option 1 — Avec Docker Compose (recommandé)
 
-# Lancer avec le profil test (H2 en mémoire)
+```bash
+# Lancer PostgreSQL
+docker compose up -d
+
+# Vérifier que la base est prête
+docker compose logs postgres | grep "database system is ready"
+
+# Lancer l'API
+./mvnw spring-boot:run
+```
+
+### Option 2 — Sans Docker
+
+```bash
+# Installer PostgreSQL manuellement
+# Créer la base de données et l'utilisateur
+psql -U postgres -c "CREATE USER stock_user WITH PASSWORD 'stock_password';"
+psql -U postgres -c "CREATE DATABASE stock_db OWNER stock_user;"
+
+# Lancer l'API
+./mvnw spring-boot:run
+```
+
+### Option 3 — Mode test (H2 en mémoire)
+
+```bash
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=test
 ```
 
 L'application démarre sur **http://localhost:8080**
 
 ## ⚙️ Configuration
+
+### Docker Compose
+
+| Service | Port | Utilisateur | Mot de passe | Base de données |
+|---------|------|-------------|-------------|------------------|
+| PostgreSQL 15 | 5432 | `stock_user` | `stock_password` | `stock_db` |
+
+```bash
+# Commandes utiles
+docker compose up -d      # Démarrer PostgreSQL
+docker compose down       # Arrêter PostgreSQL
+docker compose down -v    # Arrêter + supprimer les données
+docker compose ps         # Voir le statut
+```
 
 ### Variables d'environnement
 
