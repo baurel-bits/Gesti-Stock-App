@@ -168,16 +168,44 @@ public class OrderService {
 
     /**
      * US-09 : Annulation d'une commande.
+     * - PENDING → CANCELLED (simple annulation)
+     * - VALIDATED → CANCELLED (annulation avec restitution du stock)
+     * - CANCELLED → error (déjà annulée)
      */
     @Transactional
     public OrderResponse cancel(Long id, String userEmail) {
         Order order = orderRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Commande non trouvée avec l'id: " + id));
 
-        if (order.getStatus() != OrderStatus.PENDING) {
+        if (order.getStatus() == OrderStatus.CANCELLED) {
             throw new IllegalStateException(
-                    String.format("La commande '%s' ne peut pas être annulée (statut: %s)",
-                            order.getReference(), order.getStatus()));
+                    String.format("La commande '%s' est déjà annulée",
+                            order.getReference()));
+        }
+
+        User user = userRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Utilisateur non trouvé avec l'email: " + userEmail));
+
+        // Si la commande était validée, restituer le stock
+        if (order.getStatus() == OrderStatus.VALIDATED) {
+            for (OrderLine line : order.getLines()) {
+                Product product = line.getProduct();
+
+                StockMovement movement = StockMovement.builder()
+                        .type(StockMovement.MovementType.ENTRY)
+                        .product(product)
+                        .quantity(line.getQuantity())
+                        .reason("Restitution liée à l'annulation de la commande " + order.getReference())
+                        .performedBy(user)
+                        .order(order)
+                        .build();
+
+                stockMovementRepository.save(movement);
+
+                product.addQuantity(line.getQuantity());
+                productRepository.save(product);
+            }
         }
 
         order.transitionTo(OrderStatus.CANCELLED);

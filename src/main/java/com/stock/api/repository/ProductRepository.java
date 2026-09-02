@@ -24,9 +24,13 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
     @Query("SELECT p FROM Product p WHERE p.deleted = false AND p.quantity <= p.alertThreshold")
     Page<Product> findLowStockProducts(Pageable pageable);
 
-    @Query("SELECT p FROM Product p WHERE p.deleted = false " +
-            "AND (:categoryId IS NULL OR p.category.id = :categoryId) " +
-            "AND (:name IS NULL OR LOWER(p.name) LIKE LOWER(CONCAT('%', :name, '%')))")
+    @Query(value = "SELECT * FROM products p WHERE p.deleted = false " +
+            "AND (:categoryId IS NULL OR p.category_id = :categoryId) " +
+            "AND (:name IS NULL OR LOWER(p.name) LIKE '%' || LOWER(CAST(:name AS text)) || '%')",
+            countQuery = "SELECT COUNT(*) FROM products p WHERE p.deleted = false " +
+            "AND (:categoryId IS NULL OR p.category_id = :categoryId) " +
+            "AND (:name IS NULL OR LOWER(p.name) LIKE '%' || LOWER(CAST(:name AS text)) || '%')",
+            nativeQuery = true)
     Page<Product> findByFilters(@Param("categoryId") Long categoryId,
                                 @Param("name") String name,
                                 Pageable pageable);

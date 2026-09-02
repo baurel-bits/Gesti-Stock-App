@@ -253,6 +253,7 @@ class OrderServiceTest {
                     .build();
 
             when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+            when(userRepository.findByEmail("user@test.com")).thenReturn(Optional.of(user));
             when(orderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
             OrderResponse response = orderService.cancel(1L, "user@test.com");
@@ -261,8 +262,8 @@ class OrderServiceTest {
         }
 
         @Test
-        @DisplayName("Annulation d'une commande déjà validée → IllegalStateException")
-        void cancel_validatedOrder_throwsException() {
+        @DisplayName("Annulation d'une commande validée → succès + restitution stock")
+        void cancel_validatedOrder_success() {
             Order order = Order.builder()
                     .id(1L)
                     .reference("CMD-005")
@@ -270,10 +271,25 @@ class OrderServiceTest {
                     .createdBy(user)
                     .build();
 
-            when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+            var line = new com.stock.api.entity.OrderLine();
+            line.setProduct(product);
+            line.setQuantity(5);
+            line.setUnitPrice(BigDecimal.valueOf(29.99));
+            line.setSubtotal(BigDecimal.valueOf(149.95));
+            order.setLines(List.of(line));
 
-            assertThrows(IllegalStateException.class,
-                    () -> orderService.cancel(1L, "user@test.com"));
+            when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+            when(userRepository.findByEmail("user@test.com")).thenReturn(Optional.of(user));
+            when(stockMovementRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(orderRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+            when(productRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+            OrderResponse response = orderService.cancel(1L, "user@test.com");
+
+            assertEquals(OrderStatus.CANCELLED, response.getStatus());
+            verify(stockMovementRepository, times(1)).save(any());
+            assertEquals(15, product.getQuantity(),
+                    "Le stock doit être restitué (10 + 5 = 15)");
         }
 
         @Test
@@ -315,11 +331,11 @@ class OrderServiceTest {
         }
 
         @Test
-        @DisplayName("VALIDATED →任何 : interdit")
-        void validatedToAny_forbidden() {
+        @DisplayName("VALIDATED → CANCELLED : autorisé (annulation avec restitution stock)")
+        void validatedToCancelled_allowed() {
             Order order = Order.builder().status(OrderStatus.VALIDATED).build();
             assertFalse(order.canTransitionTo(OrderStatus.PENDING));
-            assertFalse(order.canTransitionTo(OrderStatus.CANCELLED));
+            assertTrue(order.canTransitionTo(OrderStatus.CANCELLED));
         }
 
         @Test
@@ -331,12 +347,12 @@ class OrderServiceTest {
         }
 
         @Test
-        @DisplayName("transitionTo() avec transition invalide → IllegalStateException")
+        @DisplayName("transitionTo() avec transition invalide (VALIDATED → PENDING) → IllegalStateException")
         void transitionTo_invalid_throwsException() {
             Order order = Order.builder().status(OrderStatus.VALIDATED).build();
 
             assertThrows(IllegalStateException.class,
-                    () -> order.transitionTo(OrderStatus.CANCELLED));
+                    () -> order.transitionTo(OrderStatus.PENDING));
         }
     }
 }

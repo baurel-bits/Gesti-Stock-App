@@ -99,7 +99,7 @@ public class Order {
     public boolean canTransitionTo(OrderStatus newStatus) {
         return switch (this.status) {
             case PENDING -> newStatus == OrderStatus.VALIDATED || newStatus == OrderStatus.CANCELLED;
-            case VALIDATED -> false; // Pas de transition depuis VALIDATED
+            case VALIDATED -> newStatus == OrderStatus.CANCELLED; // Annulation avec restitution stock
             case CANCELLED -> false; // Pas de transition depuis CANCELLED
         };
     }
